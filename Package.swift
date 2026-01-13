@@ -8,11 +8,11 @@ let package = Package(
     name: "VouchedSPM",
     platforms: [.iOS(.v15)],
     products: [
-        .library(name: "VouchedCore", targets: ["VouchedCoreWrapper"]),
-        .library(name: "VouchedBarcode", targets: ["VouchedBarcodeWrapper"]),
+        // Expose binary frameworks directly - consumer imports VouchedCore/VouchedBarcode
+        .library(name: "VouchedCore", targets: ["VouchedCoreFramework", "TensorFlowLiteC"]),
+        .library(name: "VouchedBarcode", targets: ["VouchedBarcodeFramework", "VouchedCoreFramework", "TensorFlowLiteC"]),
     ],
     targets: [
-        // Binary targets
         .binaryTarget(
             name: "VouchedCoreFramework",
             url: "https://github.com/Seis-Inc/VouchedSPM/releases/download/v1.9.9/VouchedCore.xcframework.zip",
@@ -27,23 +27,6 @@ let package = Package(
             name: "TensorFlowLiteC",
             url: "https://github.com/Seis-Inc/VouchedSPM/releases/download/v1.9.9/TensorFlowLiteC.xcframework.zip",
             checksum: "aaf799a6bd82500a6d4f5445a886ff0024a43c6a1fbbbdaa048470a4b9d90432"
-        ),
-        // TensorFlowLite Swift wrapper (sources bundled in repo)
-        .target(
-            name: "TensorFlowLite",
-            dependencies: ["TensorFlowLiteC"],
-            path: "Sources/TensorFlowLite/tensorflow/lite/swift/Sources"
-        ),
-        // Vouched wrapper targets
-        .target(
-            name: "VouchedCoreWrapper",
-            dependencies: ["VouchedCoreFramework", "TensorFlowLite"],
-            path: "Sources/VouchedCoreWrapper"
-        ),
-        .target(
-            name: "VouchedBarcodeWrapper",
-            dependencies: ["VouchedBarcodeFramework", "VouchedCoreWrapper"],
-            path: "Sources/VouchedBarcodeWrapper"
         ),
     ]
 )
