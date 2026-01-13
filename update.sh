@@ -3,19 +3,13 @@ set -e
 
 # VouchedSPM Update Script
 # Syncs Vouched xcframeworks from vouched-ios CocoaPods repo to this SPM repo
-# Bundles TensorFlowLite to avoid external dependency version conflicts
+# Builds TensorFlowLite.xcframework from CocoaPods to avoid version conflicts
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPSTREAM_REPO="vouched/vouched-ios"
 THIS_REPO="Seis-Inc/VouchedSPM"
 TEMP_DIR="${REPO_ROOT}/.tmp"
 VERSION_FILE="${REPO_ROOT}/version.txt"
-TFLITE_SOURCES_DIR="${REPO_ROOT}/Sources/TensorFlowLite"
-
-# TensorFlowLite version (must match upstream podspec dependency)
-TFLITE_VERSION="2.17.0"
-TFLITE_C_REPO="kewlbear/TensorFlowLiteC"
-TFLITE_SWIFT_REPO="kewlbear/TensorFlowLiteSwift"
 
 cleanup() {
     rm -rf "${TEMP_DIR}"
@@ -47,7 +41,7 @@ echo "==> New version available: ${UPSTREAM_VERSION}"
 mkdir -p "${TEMP_DIR}"
 
 # =============================================================================
-# Download Vouched frameworks
+# Download Vouched frameworks from upstream release
 # =============================================================================
 echo "==> Downloading VouchedMobileSDK.zip..."
 VOUCHED_URL="https://github.com/${UPSTREAM_REPO}/releases/download/v${UPSTREAM_VERSION}/VouchedMobileSDK.zip"
@@ -66,53 +60,87 @@ if [[ ! -d "${TEMP_DIR}/VouchedMobileSDK/VouchedBarcode.xcframework" ]]; then
 fi
 
 # =============================================================================
-# Download TensorFlowLiteC xcframework
+# Clone vouched-ios and run pod install to get TensorFlow frameworks
 # =============================================================================
-echo "==> Downloading TensorFlowLiteC.xcframework (v${TFLITE_VERSION})..."
-TFLITE_C_URL="https://github.com/${TFLITE_C_REPO}/releases/download/${TFLITE_VERSION}/TensorFlowLiteC.xcframework.zip"
-curl -sL "${TFLITE_C_URL}" -o "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip"
+echo "==> Cloning vouched-ios for CocoaPods build..."
+git clone --depth 1 "https://github.com/${UPSTREAM_REPO}.git" "${TEMP_DIR}/vouched-ios"
 
-echo "==> Extracting TensorFlowLiteC..."
-unzip -q "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" -d "${TEMP_DIR}"
+echo "==> Running pod install..."
+cd "${TEMP_DIR}/vouched-ios/Example"
+pod install --repo-update 2>&1 | tail -5
 
-if [[ ! -d "${TEMP_DIR}/TensorFlowLiteC.xcframework" ]]; then
-    echo "ERROR: TensorFlowLiteC.xcframework not found"
+# Verify TensorFlowLiteC was installed
+if [[ ! -d "Pods/TensorFlowLiteC/Frameworks/TensorFlowLiteC.xcframework" ]]; then
+    echo "ERROR: TensorFlowLiteC.xcframework not found after pod install"
     exit 1
 fi
 
 # =============================================================================
-# Get TensorFlowLiteSwift sources
+# Build TensorFlowLite.xcframework from CocoaPods sources
 # =============================================================================
-echo "==> Cloning TensorFlowLiteSwift sources..."
-git clone --depth 1 --branch "${TFLITE_VERSION}" "https://github.com/${TFLITE_SWIFT_REPO}.git" "${TEMP_DIR}/TensorFlowLiteSwift" 2>/dev/null || \
-git clone --depth 1 "https://github.com/${TFLITE_SWIFT_REPO}.git" "${TEMP_DIR}/TensorFlowLiteSwift"
+echo "==> Building TensorFlowLiteSwift for simulator..."
+xcodebuild -workspace Vouched.xcworkspace \
+    -scheme TensorFlowLiteSwift \
+    -destination 'generic/platform=iOS Simulator' \
+    -configuration Release \
+    BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+    SKIP_INSTALL=NO \
+    build 2>&1 | tail -5
 
-# Copy TensorFlowLiteSwift sources to our repo
-echo "==> Updating TensorFlowLiteSwift sources in repo..."
-rm -rf "${TFLITE_SOURCES_DIR}"
-mkdir -p "${TFLITE_SOURCES_DIR}"
-cp -R "${TEMP_DIR}/TensorFlowLiteSwift/Sources/TensorFlowLite/"* "${TFLITE_SOURCES_DIR}/"
+echo "==> Building TensorFlowLiteSwift for device..."
+xcodebuild -workspace Vouched.xcworkspace \
+    -scheme TensorFlowLiteSwift \
+    -destination 'generic/platform=iOS' \
+    -configuration Release \
+    BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+    SKIP_INSTALL=NO \
+    build 2>&1 | tail -5
+
+# Find the DerivedData path
+DERIVED_DATA=$(ls -d ~/Library/Developer/Xcode/DerivedData/Vouched-* 2>/dev/null | head -1)
+if [[ -z "${DERIVED_DATA}" ]]; then
+    echo "ERROR: Could not find Vouched DerivedData"
+    exit 1
+fi
+
+echo "==> Creating TensorFlowLite.xcframework..."
+xcodebuild -create-xcframework \
+    -framework "${DERIVED_DATA}/Build/Products/Release-iphoneos/TensorFlowLiteSwift/TensorFlowLite.framework" \
+    -framework "${DERIVED_DATA}/Build/Products/Release-iphonesimulator/TensorFlowLiteSwift/TensorFlowLite.framework" \
+    -output "${TEMP_DIR}/TensorFlowLite.xcframework"
+
+cd "${REPO_ROOT}"
 
 # =============================================================================
-# Package xcframeworks for SPM
+# Package all xcframeworks for SPM
 # =============================================================================
 echo "==> Packaging xcframeworks for SPM..."
 
+# Vouched frameworks
 cd "${TEMP_DIR}/VouchedMobileSDK"
 zip -rq "${TEMP_DIR}/VouchedCore.xcframework.zip" VouchedCore.xcframework
 zip -rq "${TEMP_DIR}/VouchedBarcode.xcframework.zip" VouchedBarcode.xcframework
-cd "${TEMP_DIR}"
+
+# TensorFlowLiteC from Pods
+cd "${TEMP_DIR}/vouched-ios/Example/Pods/TensorFlowLiteC/Frameworks"
 zip -rq "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" TensorFlowLiteC.xcframework
+
+# TensorFlowLite (built)
+cd "${TEMP_DIR}"
+zip -rq "${TEMP_DIR}/TensorFlowLite.xcframework.zip" TensorFlowLite.xcframework
+
 cd "${REPO_ROOT}"
 
 # Compute checksums
 CORE_CHECKSUM=$(shasum -a 256 "${TEMP_DIR}/VouchedCore.xcframework.zip" | awk '{print $1}')
 BARCODE_CHECKSUM=$(shasum -a 256 "${TEMP_DIR}/VouchedBarcode.xcframework.zip" | awk '{print $1}')
 TFLITE_C_CHECKSUM=$(shasum -a 256 "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" | awk '{print $1}')
+TFLITE_CHECKSUM=$(shasum -a 256 "${TEMP_DIR}/TensorFlowLite.xcframework.zip" | awk '{print $1}')
 
 echo "    VouchedCore checksum: ${CORE_CHECKSUM}"
 echo "    VouchedBarcode checksum: ${BARCODE_CHECKSUM}"
 echo "    TensorFlowLiteC checksum: ${TFLITE_C_CHECKSUM}"
+echo "    TensorFlowLite checksum: ${TFLITE_CHECKSUM}"
 
 # =============================================================================
 # Create GitHub release
@@ -132,11 +160,12 @@ gh release create "v${UPSTREAM_VERSION}" \
 Includes:
 - VouchedCore.xcframework
 - VouchedBarcode.xcframework
-- TensorFlowLiteC.xcframework (v${TFLITE_VERSION})
-- TensorFlowLiteSwift sources (v${TFLITE_VERSION})" \
+- TensorFlowLiteC.xcframework
+- TensorFlowLite.xcframework (built from CocoaPods)" \
     "${TEMP_DIR}/VouchedCore.xcframework.zip" \
     "${TEMP_DIR}/VouchedBarcode.xcframework.zip" \
-    "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip"
+    "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" \
+    "${TEMP_DIR}/TensorFlowLite.xcframework.zip"
 
 # =============================================================================
 # Generate Package.swift
@@ -146,7 +175,7 @@ echo "==> Generating Package.swift..."
 cat > "${REPO_ROOT}/Package.swift" << EOF
 // swift-tools-version:5.7
 // Synced from vouched-ios v${UPSTREAM_VERSION}
-// TensorFlowLite v${TFLITE_VERSION} bundled (no external dependencies)
+// TensorFlowLite built from CocoaPods (no external dependencies)
 
 import PackageDescription
 
@@ -154,11 +183,10 @@ let package = Package(
     name: "VouchedSPM",
     platforms: [.iOS(.v15)],
     products: [
-        .library(name: "VouchedCore", targets: ["VouchedCoreWrapper"]),
-        .library(name: "VouchedBarcode", targets: ["VouchedBarcodeWrapper"]),
+        .library(name: "VouchedCore", targets: ["VouchedCoreFramework", "TensorFlowLite", "TensorFlowLiteC"]),
+        .library(name: "VouchedBarcode", targets: ["VouchedBarcodeFramework", "VouchedCoreFramework", "TensorFlowLite", "TensorFlowLiteC"]),
     ],
     targets: [
-        // Binary targets
         .binaryTarget(
             name: "VouchedCoreFramework",
             url: "https://github.com/${THIS_REPO}/releases/download/v${UPSTREAM_VERSION}/VouchedCore.xcframework.zip",
@@ -174,22 +202,10 @@ let package = Package(
             url: "https://github.com/${THIS_REPO}/releases/download/v${UPSTREAM_VERSION}/TensorFlowLiteC.xcframework.zip",
             checksum: "${TFLITE_C_CHECKSUM}"
         ),
-        // TensorFlowLite Swift wrapper (sources bundled in repo)
-        .target(
+        .binaryTarget(
             name: "TensorFlowLite",
-            dependencies: ["TensorFlowLiteC"],
-            path: "Sources/TensorFlowLite/tensorflow/lite/swift/Sources"
-        ),
-        // Vouched wrapper targets
-        .target(
-            name: "VouchedCoreWrapper",
-            dependencies: ["VouchedCoreFramework", "TensorFlowLite"],
-            path: "Sources/VouchedCoreWrapper"
-        ),
-        .target(
-            name: "VouchedBarcodeWrapper",
-            dependencies: ["VouchedBarcodeFramework", "VouchedCoreWrapper"],
-            path: "Sources/VouchedBarcodeWrapper"
+            url: "https://github.com/${THIS_REPO}/releases/download/v${UPSTREAM_VERSION}/TensorFlowLite.xcframework.zip",
+            checksum: "${TFLITE_CHECKSUM}"
         ),
     ]
 )
@@ -203,17 +219,20 @@ echo "${UPSTREAM_VERSION}" > "${VERSION_FILE}"
 
 echo "==> Committing changes..."
 cd "${REPO_ROOT}"
-git add Package.swift version.txt Sources/TensorFlowLite
+git add Package.swift version.txt
 git commit -m "Sync with vouched-ios v${UPSTREAM_VERSION}
 
-Bundled dependencies (no external SPM packages):
+All binary xcframeworks (no source compilation):
 - VouchedCore.xcframework: ${CORE_CHECKSUM}
 - VouchedBarcode.xcframework: ${BARCODE_CHECKSUM}
 - TensorFlowLiteC.xcframework: ${TFLITE_C_CHECKSUM}
-- TensorFlowLiteSwift sources: v${TFLITE_VERSION}"
+- TensorFlowLite.xcframework: ${TFLITE_CHECKSUM}"
 
 echo "==> Pushing to remote..."
 git push origin main
+
+# Clean up Vouched DerivedData
+rm -rf "${DERIVED_DATA}"
 
 echo "==> Done! Updated to v${UPSTREAM_VERSION}"
 echo ""
