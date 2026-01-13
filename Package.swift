@@ -1,6 +1,6 @@
 // swift-tools-version:5.7
 // Synced from vouched-ios v1.9.9
-// TensorFlowLite v2.17.0 bundled (no external dependencies)
+// TensorFlowLite built from CocoaPods (no external dependencies)
 
 import PackageDescription
 
@@ -25,12 +25,12 @@ let package = Package(
         .binaryTarget(
             name: "TensorFlowLiteC",
             url: "https://github.com/Seis-Inc/VouchedSPM/releases/download/v1.9.9/TensorFlowLiteC.xcframework.zip",
-            checksum: "aaf799a6bd82500a6d4f5445a886ff0024a43c6a1fbbbdaa048470a4b9d90432"
+            checksum: "34eb5578b4c924be4a218a7854ed68de444a1699c2f4ba86f9b2fdeb2a954dfb"
         ),
         .binaryTarget(
             name: "TensorFlowLite",
             url: "https://github.com/Seis-Inc/VouchedSPM/releases/download/v1.9.9/TensorFlowLite.xcframework.zip",
-            checksum: "02bc182e39462456a5a310b32f7698eef33f25047c3a9c032bbf606eb2445d45"
+            checksum: "daf61d87a4661636a0b323a663f148f3aec2a0bf0e73e078661332138f99df14"
         ),
     ]
 )
