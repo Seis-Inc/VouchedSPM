@@ -58,8 +58,6 @@ fastlane/test_output
 iOSInjectionProject/
 
 # Claude Code
-.claude/
-CLAUDE.md
 .claude_memory/
 .claudeignore
 
