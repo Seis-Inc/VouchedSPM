@@ -178,8 +178,7 @@ let package = Package(
         .target(
             name: "TensorFlowLite",
             dependencies: ["TensorFlowLiteC"],
-            path: "Sources/TensorFlowLite",
-            exclude: ["LICENSE", "README.md"]
+            path: "Sources/TensorFlowLite/tensorflow/lite/swift/Sources"
         ),
         // Vouched wrapper targets
         .target(
