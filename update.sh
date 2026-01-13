@@ -10,6 +10,22 @@ UPSTREAM_REPO="vouched/vouched-ios"
 THIS_REPO="Seis-Inc/VouchedSPM"
 TEMP_DIR="${REPO_ROOT}/.tmp"
 VERSION_FILE="${REPO_ROOT}/version.txt"
+FORCE=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force|-f)
+            FORCE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--force|-f]"
+            exit 1
+            ;;
+    esac
+done
 
 cleanup() {
     rm -rf "${TEMP_DIR}"
@@ -32,12 +48,17 @@ else
 fi
 
 # Compare versions
-if [[ "${UPSTREAM_VERSION}" == "${LOCAL_VERSION}" ]]; then
+if [[ "${UPSTREAM_VERSION}" == "${LOCAL_VERSION}" ]] && [[ "${FORCE}" != "true" ]]; then
     echo "==> Already up to date (v${LOCAL_VERSION})"
+    echo "    Use --force to re-release anyway"
     exit 0
 fi
 
-echo "==> New version available: ${UPSTREAM_VERSION}"
+if [[ "${FORCE}" == "true" ]] && [[ "${UPSTREAM_VERSION}" == "${LOCAL_VERSION}" ]]; then
+    echo "==> Force re-release of v${UPSTREAM_VERSION}"
+else
+    echo "==> New version available: ${UPSTREAM_VERSION}"
+fi
 mkdir -p "${TEMP_DIR}"
 
 # =============================================================================
