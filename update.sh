@@ -142,7 +142,39 @@ cd "${TEMP_DIR}/VouchedMobileSDK"
 zip -rq "${TEMP_DIR}/VouchedCore.xcframework.zip" VouchedCore.xcframework
 zip -rq "${TEMP_DIR}/VouchedBarcode.xcframework.zip" VouchedBarcode.xcframework
 
-# TensorFlowLiteC from Pods
+# TensorFlowLiteC from Pods - add missing Info.plist to each framework slice
+TFLITE_C_XCF="${TEMP_DIR}/vouched-ios/Example/Pods/TensorFlowLiteC/Frameworks/TensorFlowLiteC.xcframework"
+for FRAMEWORK_DIR in "${TFLITE_C_XCF}"/*/TensorFlowLiteC.framework; do
+    if [[ -d "${FRAMEWORK_DIR}" ]] && [[ ! -f "${FRAMEWORK_DIR}/Info.plist" ]]; then
+        cat > "${FRAMEWORK_DIR}/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>TensorFlowLiteC</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.tensorflow.TensorFlowLiteC</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>TensorFlowLiteC</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>2.14.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>MinimumOSVersion</key>
+    <string>12.0</string>
+</dict>
+</plist>
+PLIST
+    fi
+done
+
 cd "${TEMP_DIR}/vouched-ios/Example/Pods/TensorFlowLiteC/Frameworks"
 zip -rq "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" TensorFlowLiteC.xcframework
 
@@ -162,31 +194,6 @@ echo "    VouchedCore checksum: ${CORE_CHECKSUM}"
 echo "    VouchedBarcode checksum: ${BARCODE_CHECKSUM}"
 echo "    TensorFlowLiteC checksum: ${TFLITE_C_CHECKSUM}"
 echo "    TensorFlowLite checksum: ${TFLITE_CHECKSUM}"
-
-# =============================================================================
-# Create GitHub release
-# =============================================================================
-echo "==> Creating GitHub release v${UPSTREAM_VERSION}..."
-
-if gh release view "v${UPSTREAM_VERSION}" --repo "${THIS_REPO}" &>/dev/null; then
-    echo "    Release v${UPSTREAM_VERSION} already exists, deleting..."
-    gh release delete "v${UPSTREAM_VERSION}" --repo "${THIS_REPO}" --yes
-fi
-
-gh release create "v${UPSTREAM_VERSION}" \
-    --repo "${THIS_REPO}" \
-    --title "v${UPSTREAM_VERSION}" \
-    --notes "Synced from vouched-ios v${UPSTREAM_VERSION}
-
-Includes:
-- VouchedCore.xcframework
-- VouchedBarcode.xcframework
-- TensorFlowLiteC.xcframework
-- TensorFlowLite.xcframework (built from CocoaPods)" \
-    "${TEMP_DIR}/VouchedCore.xcframework.zip" \
-    "${TEMP_DIR}/VouchedBarcode.xcframework.zip" \
-    "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" \
-    "${TEMP_DIR}/TensorFlowLite.xcframework.zip"
 
 # =============================================================================
 # Generate Package.swift
@@ -233,14 +240,14 @@ let package = Package(
 EOF
 
 # =============================================================================
-# Commit and push
+# Commit and push (BEFORE creating release so tag points to correct commit)
 # =============================================================================
 echo "==> Updating version file..."
 echo "${UPSTREAM_VERSION}" > "${VERSION_FILE}"
 
 echo "==> Committing changes..."
 cd "${REPO_ROOT}"
-git add Package.swift version.txt
+git add Package.swift version.txt update.sh
 git commit -m "Sync with vouched-ios v${UPSTREAM_VERSION}
 
 All binary xcframeworks (no source compilation):
@@ -251,6 +258,32 @@ All binary xcframeworks (no source compilation):
 
 echo "==> Pushing to remote..."
 git push origin main
+
+# =============================================================================
+# Create GitHub release (AFTER commit so tag points to commit with correct checksums)
+# =============================================================================
+echo "==> Creating GitHub release v${UPSTREAM_VERSION}..."
+
+if gh release view "v${UPSTREAM_VERSION}" --repo "${THIS_REPO}" &>/dev/null; then
+    echo "    Release v${UPSTREAM_VERSION} already exists, deleting..."
+    gh release delete "v${UPSTREAM_VERSION}" --repo "${THIS_REPO}" --yes
+    git push origin :refs/tags/v${UPSTREAM_VERSION} 2>/dev/null || true
+fi
+
+gh release create "v${UPSTREAM_VERSION}" \
+    --repo "${THIS_REPO}" \
+    --title "v${UPSTREAM_VERSION}" \
+    --notes "Synced from vouched-ios v${UPSTREAM_VERSION}
+
+Includes:
+- VouchedCore.xcframework
+- VouchedBarcode.xcframework
+- TensorFlowLiteC.xcframework
+- TensorFlowLite.xcframework (built from CocoaPods)" \
+    "${TEMP_DIR}/VouchedCore.xcframework.zip" \
+    "${TEMP_DIR}/VouchedBarcode.xcframework.zip" \
+    "${TEMP_DIR}/TensorFlowLiteC.xcframework.zip" \
+    "${TEMP_DIR}/TensorFlowLite.xcframework.zip"
 
 # Clean up Vouched DerivedData
 rm -rf "${DERIVED_DATA}"

@@ -25,12 +25,12 @@ let package = Package(
         .binaryTarget(
             name: "TensorFlowLiteC",
             url: "https://github.com/Seis-Inc/VouchedSPM/releases/download/v1.9.9/TensorFlowLiteC.xcframework.zip",
-            checksum: "236f10829b69e31545cc8166c807f259846f3ad3dd1f7082d0e7c1cf5379e45c"
+            checksum: "d50f14e3483ad18716a296d5a32dd397a4f28efab9d3f68cf908f21df3182e74"
         ),
         .binaryTarget(
             name: "TensorFlowLite",
             url: "https://github.com/Seis-Inc/VouchedSPM/releases/download/v1.9.9/TensorFlowLite.xcframework.zip",
-            checksum: "b2f091d4290ee19361d12a832c54657f031e615e78658848b99eb9b3744cd94d"
+            checksum: "d477587e96cea23812452329fa0f1589289af030e9a469be4fabe9daa77cb131"
         ),
     ]
 )
