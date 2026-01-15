@@ -168,7 +168,7 @@ for FRAMEWORK_DIR in "${TFLITE_C_XCF}"/*/TensorFlowLiteC.framework; do
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>MinimumOSVersion</key>
-    <string>9.0</string>
+    <string>100.0</string>
     <key>NSPrincipalClass</key>
     <string></string>
 </dict>
